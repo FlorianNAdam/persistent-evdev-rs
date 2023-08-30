@@ -18,6 +18,7 @@ use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::task::spawn_blocking;
 use tokio::time::sleep;
 use udev::{EventType, MonitorBuilder};
 
@@ -87,11 +88,10 @@ impl Device {
         if self.uinput.is_none() {
             let capabilities = capabilities::get_capabilities(evdev);
 
-            if capabilities
-                .save(CONFIG.cache.join(&self.name).with_extension("json"))
-                .is_err()
+            if let Err(err) =
+                capabilities.save(CONFIG.cache.join(&self.name).with_extension("json"))
             {
-                error!("failed saving capabilities for {}", self.name);
+                error!("failed saving capabilities for {}: {}", self.name, err);
             }
 
             if let Ok(device) = create_device_with_capabilities(&self.name, &capabilities) {
@@ -120,7 +120,7 @@ impl State {
     }
 }
 
-async fn release(device: &mut evdev::Device) -> GenericResult<()> {
+fn release(device: &mut evdev::Device) -> GenericResult<()> {
     let key_state = device.get_key_state()?;
     let mut keys = vec![];
     for value in key_state.iter() {
@@ -130,22 +130,22 @@ async fn release(device: &mut evdev::Device) -> GenericResult<()> {
     Ok(())
 }
 
-async fn wait_for_release(device: &evdev::Device) -> GenericResult<()> {
+fn wait_for_release(device: &evdev::Device) -> GenericResult<()> {
     while device.get_key_state()?.iter().next().is_some() {
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        std::thread::sleep(Duration::from_millis(50));
     }
     Ok(())
 }
 
-async fn grab(device: &mut evdev::Device) -> GenericResult<()> {
-    release(device).await?;
-    wait_for_release(device).await?;
+fn grab(device: &mut evdev::Device) -> GenericResult<()> {
+    release(device)?;
+    wait_for_release(device)?;
     device.grab()?;
     Ok(())
 }
 
-async fn event_proxy(mut evdev: evdev::Device, uinput: &mut VirtualDevice) -> GenericResult<()> {
-    grab(&mut evdev).await?;
+fn event_proxy(mut evdev: evdev::Device, uinput: &mut VirtualDevice) -> GenericResult<()> {
+    grab(&mut evdev)?;
 
     loop {
         let mut events = vec![];
@@ -159,8 +159,15 @@ async fn event_proxy(mut evdev: evdev::Device, uinput: &mut VirtualDevice) -> Ge
 async fn evdev_thread(mut device: Device, evdev: evdev::Device, tx: UnboundedSender<Device>) {
     info!("opened evdev {} {:?}", device.name, device.path);
 
-    if let Some(uinput) = &mut device.uinput {
-        let _ = event_proxy(evdev, uinput).await;
+    if let Some(mut uinput) = device.uinput {
+        let uinput = spawn_blocking(move || {
+            let _ = event_proxy(evdev, &mut uinput);
+            uinput
+        })
+        .await
+        .unwrap();
+
+        device.uinput = Some(uinput);
         info!("closed evdev {} {:?}", device.name, device.path)
     }
 
