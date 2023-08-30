@@ -1,0 +1,5 @@
+{
+  "cache": "/opt/persistent-evdev-rs/cache",
+  "devices": {},
+  "default_udev_interval": 50
+}
