@@ -2,7 +2,7 @@
 Description=Persistent evdev proxy
 
 [Service]
-ExecStart=/bin/persistent-evdev-rs /opt/persistent-evdev-rs/etc/config.json
+ExecStart=/usr/sbin/persistent-evdev-rs /etc/persistent-evdev-rs/config.json
 
 [Install]
 WantedBy=multi-user.target
