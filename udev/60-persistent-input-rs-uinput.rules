@@ -1,0 +1,1 @@
+KERNEL=="event*", ATTRS{phys}=="rs-evdev-uinput", ATTRS{name}=="?*", SYMLINK+="input/by-id/uinput-$attr{name}"
