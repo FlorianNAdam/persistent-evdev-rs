@@ -175,6 +175,7 @@ async fn evdev_thread(mut device: Device, evdev: evdev::Device, tx: UnboundedSen
 }
 
 async fn update_devices(state: &mut State) {
+    let mut devices = vec![];
     while let Ok(mut device) = state.rx.try_recv() {
         if device.path.exists() {
             if let Ok(evdev) = evdev::Device::open(&device.path) {
@@ -184,6 +185,9 @@ async fn update_devices(state: &mut State) {
                 continue;
             }
         }
+        devices.push(device);
+    }
+    for device in devices {
         let _ = state.tx.send(device);
     }
 }
