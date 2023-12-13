@@ -209,7 +209,7 @@ async fn udev_loop(mut state: State) {
     }
 }
 
-#[tokio::main(flavor = "current_thread")]
+#[tokio::main(flavor = "multi_thread", worker_threads = 5)]
 async fn main() {
     SimpleLogger::new()
         .env()
