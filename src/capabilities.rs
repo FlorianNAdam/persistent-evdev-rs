@@ -35,7 +35,7 @@ pub fn create_device_with_capabilities(
     name: &str,
     capabilities: &Capabilities,
 ) -> GenericResult<VirtualDevice> {
-    let mut device = evdev::uinput::VirtualDeviceBuilder::new()?
+    let mut device = evdev::uinput::VirtualDevice::builder()?
         .name(name)
         .with_phys(&CString::new("rs-evdev-uinput")?)?;
 
