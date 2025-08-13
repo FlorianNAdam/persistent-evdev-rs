@@ -5,6 +5,7 @@ use evdev::{
     RelativeAxisCode, SwitchCode, UinputAbsSetup,
 };
 use serde::{Deserialize, Serialize};
+use std::ffi::CString;
 use std::fs;
 use std::path::PathBuf;
 
@@ -36,7 +37,7 @@ pub fn create_device_with_capabilities(
 ) -> GenericResult<VirtualDevice> {
     let mut device = evdev::uinput::VirtualDeviceBuilder::new()?
         .name(name)
-        .with_phys("rs-evdev-uinput")?;
+        .with_phys(&CString::new("rs-evdev-uinput")?)?;
 
     device = device.with_properties(&capabilities.properties())?;
 
