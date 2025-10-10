@@ -89,9 +89,8 @@
       {
         packages = {
           inherit persistent-evdev-rs;
+          default = persistent-evdev-rs;
         };
-
-        defaultPackage = self.packages.${system}.persistent-evdev-rs;
 
         devShell = pkgs.mkShell {
           buildInputs = with pkgs; [
