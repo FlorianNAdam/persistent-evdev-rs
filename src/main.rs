@@ -17,16 +17,18 @@ use std::fs;
 use std::path::PathBuf;
 use std::process::exit;
 use std::time::Duration;
-use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
+use tokio::sync::mpsc::{
+    unbounded_channel, UnboundedReceiver, UnboundedSender,
+};
 use tokio::task::spawn_blocking;
-use tokio::time::sleep;
-use udev::{EventType, MonitorBuilder};
+use tokio_stream::StreamExt;
+use tokio_udev::{AsyncMonitorSocket, EventType, MonitorBuilder};
 
 pub type GenericResult<T> = Result<T, Box<dyn std::error::Error + Send + Sync>>;
 
 lazy_static! {
     pub static ref CONFIG: Config = Config::new().unwrap_or_else(|e| {
-        println!("failed loading config: {}", e);
+        error!("failed loading config: {}", e);
         exit(1);
     });
 }
@@ -41,16 +43,10 @@ pub struct Config {
     #[serde(default = "default_cache")]
     cache: PathBuf,
     devices: HashMap<String, PathBuf>,
-    #[serde(default = "default_udev_interval")]
-    udev_interval: u64,
 }
 
 fn default_cache() -> PathBuf {
     PathBuf::from("/opt/persistent-evdev-rs/cache")
-}
-
-fn default_udev_interval() -> u64 {
-    50
 }
 
 impl Config {
@@ -70,7 +66,10 @@ struct Device {
 
 impl Device {
     fn new(name: String, path: PathBuf) -> Self {
-        let capabilities_path = CONFIG.cache.join(&name).with_extension("json");
+        let capabilities_path = CONFIG
+            .cache
+            .join(&name)
+            .with_extension("json");
         let capabilities = Capabilities::load(capabilities_path).ok();
 
         let uinput = if let Some(capabilities) = &capabilities {
@@ -88,13 +87,18 @@ impl Device {
         if self.uinput.is_none() {
             let capabilities = capabilities::get_capabilities(evdev);
 
-            if let Err(err) =
-                capabilities.save(CONFIG.cache.join(&self.name).with_extension("json"))
-            {
+            if let Err(err) = capabilities.save(
+                CONFIG
+                    .cache
+                    .join(&self.name)
+                    .with_extension("json"),
+            ) {
                 error!("failed saving capabilities for {}: {}", self.name, err);
             }
 
-            if let Ok(device) = create_device_with_capabilities(&self.name, &capabilities) {
+            if let Ok(device) =
+                create_device_with_capabilities(&self.name, &capabilities)
+            {
                 self.uinput.replace(device);
             }
         }
@@ -131,7 +135,12 @@ fn release(device: &mut evdev::Device) -> GenericResult<()> {
 }
 
 fn wait_for_release(device: &evdev::Device) -> GenericResult<()> {
-    while device.get_key_state()?.iter().next().is_some() {
+    while device
+        .get_key_state()?
+        .iter()
+        .next()
+        .is_some()
+    {
         std::thread::sleep(Duration::from_millis(50));
     }
     Ok(())
@@ -144,7 +153,10 @@ fn grab(device: &mut evdev::Device) -> GenericResult<()> {
     Ok(())
 }
 
-fn event_proxy(mut evdev: evdev::Device, uinput: &mut VirtualDevice) -> GenericResult<()> {
+fn event_proxy(
+    mut evdev: evdev::Device,
+    uinput: &mut VirtualDevice,
+) -> GenericResult<()> {
     grab(&mut evdev)?;
 
     loop {
@@ -156,7 +168,11 @@ fn event_proxy(mut evdev: evdev::Device, uinput: &mut VirtualDevice) -> GenericR
     }
 }
 
-async fn evdev_thread(mut device: Device, evdev: evdev::Device, tx: UnboundedSender<Device>) {
+async fn evdev_thread(
+    mut device: Device,
+    evdev: evdev::Device,
+    tx: UnboundedSender<Device>,
+) {
     info!("opened evdev {} {:?}", device.name, device.path);
 
     if let Some(mut uinput) = device.uinput {
@@ -193,19 +209,28 @@ async fn update_devices(state: &mut State) {
 }
 
 async fn udev_loop(mut state: State) {
-    let builder = MonitorBuilder::new().expect("failed creating udev monitor");
-    let builder = builder
+    let monitor = MonitorBuilder::new()
+        .expect("failed creating udev monitor")
         .match_subsystem("input")
-        .expect("failed finding input subsystem");
-    let monitor = builder.listen().expect("failed binding to udev events");
+        .expect("failed finding input subsystem")
+        .listen()
+        .expect("failed binding to udev events");
 
-    loop {
-        for event in monitor.iter() {
-            if event.event_type() == EventType::Add {
-                update_devices(&mut state).await;
+    let mut monitor_stream = AsyncMonitorSocket::new(monitor)
+        .expect("failed to create async monitor");
+
+    while let Some(event) = monitor_stream.next().await {
+        match event {
+            Ok(event) => match event.event_type() {
+                EventType::Add => {
+                    update_devices(&mut state).await;
+                }
+                _ => {}
+            },
+            Err(e) => {
+                error!("failed reading event: {}", e)
             }
         }
-        sleep(Duration::from_millis(CONFIG.udev_interval.clone())).await;
     }
 }
 
