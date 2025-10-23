@@ -1,6 +1,6 @@
 #!/bin/bash
 
-VERSION="0.1.0"
+VERSION="0.2.0"
 
 tar -cvf persistent-evdev-rs-$VERSION-x86_64.tar LICENSE.md
 tar -rvf persistent-evdev-rs-$VERSION-x86_64.tar config.json
