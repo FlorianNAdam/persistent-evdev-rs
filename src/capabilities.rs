@@ -9,7 +9,7 @@ use std::ffi::CString;
 use std::fs;
 use std::path::PathBuf;
 
-#[derive(Serialize, Deserialize, Debug)]
+#[derive(Serialize, Deserialize, Debug, Eq)]
 pub struct AbsInfoData {
     value: i32,
     minimum: i32,
@@ -19,7 +19,20 @@ pub struct AbsInfoData {
     resolution: i32,
 }
 
-#[derive(Serialize, Deserialize, Debug)]
+impl PartialEq for AbsInfoData {
+    fn eq(
+        &self,
+        other: &Self,
+    ) -> bool {
+        self.minimum == other.minimum
+            && self.maximum == other.maximum
+            && self.fuzz == other.fuzz
+            && self.flat == other.flat
+            && self.resolution == other.resolution
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
 pub struct Capabilities {
     properties: Vec<u16>,
     keys: Vec<u16>,

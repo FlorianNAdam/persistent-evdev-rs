@@ -67,6 +67,7 @@ impl Config {
 struct Device {
     name: String,
     path: PathBuf,
+    capabilities: Option<Capabilities>,
     uinput: Option<VirtualDevice>,
 }
 
@@ -89,29 +90,45 @@ impl Device {
             None
         };
 
-        Self { name, path, uinput }
+        Self {
+            name,
+            path,
+            capabilities,
+            uinput,
+        }
     }
 
     async fn open_uinput(
         &mut self,
         evdev: &evdev::Device,
     ) {
-        if self.uinput.is_none() {
-            let capabilities = capabilities::get_capabilities(evdev);
+        let capabilities = capabilities::get_capabilities(evdev);
+        let changed = self.capabilities.as_ref() != Some(&capabilities);
 
-            if let Err(err) = capabilities.save(
-                CONFIG
-                    .cache
-                    .join(&self.name)
-                    .with_extension("json"),
-            ) {
-                error!("failed saving capabilities for {}: {}", self.name, err);
+        if changed || self.uinput.is_none() {
+            if changed {
+                if let Err(err) = capabilities.save(
+                    CONFIG
+                        .cache
+                        .join(&self.name)
+                        .with_extension("json"),
+                ) {
+                    error!(
+                        "failed saving capabilities for {}: {}",
+                        self.name, err
+                    );
+                }
             }
 
-            if let Ok(device) =
-                create_device_with_capabilities(&self.name, &capabilities)
-            {
-                self.uinput.replace(device);
+            match create_device_with_capabilities(&self.name, &capabilities) {
+                Ok(device) => {
+                    self.uinput.replace(device);
+                    self.capabilities = Some(capabilities);
+                }
+                Err(err) => error!(
+                    "failed creating uinput device for {}: {}",
+                    self.name, err
+                ),
             }
         }
     }
