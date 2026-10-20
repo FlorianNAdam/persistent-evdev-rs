@@ -1,8 +1,8 @@
 use crate::GenericResult;
 use evdev::uinput::VirtualDevice;
 use evdev::{
-    AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffectCode, KeyCode, MiscCode, PropType,
-    RelativeAxisCode, SwitchCode, UinputAbsSetup,
+    AbsInfo, AbsoluteAxisCode, AttributeSet, FFEffectCode, KeyCode, MiscCode,
+    PropType, RelativeAxisCode, SwitchCode, UinputAbsSetup,
 };
 use serde::{Deserialize, Serialize};
 use std::ffi::CString;
@@ -61,7 +61,7 @@ pub fn create_device_with_capabilities(
         device = device.with_ff(&ff)?;
     }
 
-    device = device.with_ff_effects_max(capabilities.max_ff_effects.clone() as u32);
+    device = device.with_ff_effects_max(capabilities.max_ff_effects as u32);
 
     if let Some(msc) = &capabilities.msc() {
         device = device.with_msc(&msc)?;
@@ -73,7 +73,11 @@ pub fn create_device_with_capabilities(
 macro_rules! map_to_primitive {
     ($expression:expr) => {
         $expression
-            .map(|v| v.iter().map(|ff| ff.0).collect::<Vec<_>>())
+            .map(|v| {
+                v.iter()
+                    .map(|ff| ff.0)
+                    .collect::<Vec<_>>()
+            })
             .unwrap_or_default()
     };
 }
@@ -127,7 +131,11 @@ pub fn get_capabilities(device: &evdev::Device) -> Capabilities {
 macro_rules! map_from_primitive {
     ($name:ident,$t:ident) => {
         fn $name(&self) -> Option<AttributeSet<$t>> {
-            let $name = self.$name.iter().map(|&v| $t(v)).collect::<Vec<_>>();
+            let $name = self
+                .$name
+                .iter()
+                .map(|&v| $t(v))
+                .collect::<Vec<_>>();
             if $name.is_empty() {
                 return None;
             } else {
@@ -174,7 +182,10 @@ impl Capabilities {
         absolute_axes
     }
 
-    pub fn save(&self, path: PathBuf) -> GenericResult<()> {
+    pub fn save(
+        &self,
+        path: PathBuf,
+    ) -> GenericResult<()> {
         let res = serde_json::to_string(self)?;
         fs::write(path, res)?;
         Ok(())

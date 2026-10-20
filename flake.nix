@@ -96,6 +96,7 @@
           buildInputs = with pkgs; [
             cargo
             rustc
+            rustfmt
             systemd
           ];
 
@@ -105,6 +106,7 @@
 
           packages = with pkgs; [
             rust-analyzer
+            cargo-edit
           ];
         };
       }
